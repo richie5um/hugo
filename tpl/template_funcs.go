@@ -312,6 +312,69 @@ func split(a interface{}, delimiter string) ([]string, error) {
 	return strings.Split(aStr, delimiter), nil
 }
 
+func join(i1, i2 interface{}) (interface{}, error) {
+	if nil == i1 {
+		i1 = ""
+	}
+	if nil == i2 {
+		i2 = ""
+	}
+
+	i1Value := reflect.ValueOf(i1)
+	i2Value := reflect.ValueOf(i2)
+
+	splitComma := func(c rune) bool {
+		return ',' == c
+	}
+
+	if i1Value.Kind() == reflect.String {
+		i1Value = reflect.ValueOf(strings.FieldsFunc(i1.(string), splitComma))
+		i1 = i1Value.Interface()
+	}
+
+	if i2Value.Kind() == reflect.String {
+		i2Value = reflect.ValueOf(strings.FieldsFunc(i2.(string), splitComma))
+		i2 = i2Value.Interface()
+	}
+
+	i1Type := reflect.TypeOf(i1).Elem()
+	i2Type := reflect.TypeOf(i2).Elem()
+
+	if i1Type != i2Type {
+		return nil, fmt.Errorf("Different Element Types: %v %v", i1Type, i2Type)
+	}
+
+	if i1Value.Kind() == reflect.Array {
+		i1s := reflect.MakeSlice(reflect.SliceOf(i1Type), 0, i1Value.Len())
+		for i := 0; i < i1Value.Len(); i++ {
+			i1s = reflect.Append(i1s, i1Value.Index(i))
+		}
+		i1Value = i1s
+	}
+
+	if i2Value.Kind() == reflect.Array {
+		i2s := reflect.MakeSlice(reflect.SliceOf(i2Type), 0, i2Value.Len())
+		for i := 0; i < i2Value.Len(); i++ {
+			i2s = reflect.Append(i2s, i2Value.Index(i))
+		}
+		i2Value = i2s
+	}
+
+	if i1Value.Kind() == reflect.Slice && i2Value.Kind() == reflect.Slice {
+		if 0 < i1Value.Len() && 0 < i2Value.Len() {
+			return reflect.AppendSlice(i1Value, i2Value).Interface(), nil
+		} else if 0 < i1Value.Len() {
+			return i1Value.Interface(), nil
+		} else if 0 < i2Value.Len() {
+			return i2Value.Interface(), nil
+		} else {
+			return nil, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Not implemented")
+}
+
 // intersect returns the common elements in the given sets, l1 and l2.  l1 and
 // l2 must be of the same type and may be either arrays or slices.
 func intersect(l1, l2 interface{}) (interface{}, error) {
@@ -769,6 +832,22 @@ func checkCondition(v, mv reflect.Value, op string) (bool, error) {
 			return !r, nil
 		}
 		return r, nil
+	case "join":
+		r, err := join(slv, slmv)
+		if err != nil {
+			return false, err
+		}
+
+		if reflect.TypeOf(r).Kind() == reflect.Slice {
+			s := reflect.ValueOf(r)
+
+			if s.Len() > 0 {
+				return true, nil
+			}
+			return false, nil
+		} else {
+			return false, errors.New("invalid join values")
+		}
 	case "intersect":
 		r, err := intersect(slv, slmv)
 		if err != nil {
@@ -1783,6 +1862,7 @@ func init() {
 		"intersect":    intersect,
 		"isSet":        isSet,
 		"isset":        isSet,
+		"join":         join,
 		"jsonify":      jsonify,
 		"last":         last,
 		"le":           le,
